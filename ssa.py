@@ -7,10 +7,8 @@ class SSA:
         The SSA method implemented in this package is pulled from the book
         Analysis of Time Series Structure SSA and Related Techniques
         By Nina Golyandina, Vladimir Nekrutkin, Anatoly A Zhigljavsky · 2001
-        
-        Autogrouping is done via technique described in autogrouping.pdf
     """
-    
+
     def __decompose(self):
         """
             Performs the decomposition step by computing the trajectory matrix X of
@@ -19,7 +17,7 @@ class SSA:
         self.X = np.matrix(np.zeros(shape=(self.L, self.K)))
         for tidx in range(self.K):
             self.X[:, tidx] = self.F[0, tidx:tidx+self.L].T
-    
+
     def __svd(self):
         """
             Performs the SVD step where the SVD is computed and reformed into
@@ -28,7 +26,6 @@ class SSA:
         """
         # Compute the SVD of X*X.T
         u, s, vh = np.linalg.svd(self.X*self.X.T)
-        
         self._svd = (u, s, vh)
 
         # Grab the rank of s
@@ -36,10 +33,10 @@ class SSA:
             d = np.argmin(s > 0)
         else:
             d = len(s)
-        
+
         # Set the rank for to
         self.rank = d
-        
+
         # Restructure the U, S, V^T into its eigentriple grouping
         # where X = [X_0, X_1, ...]
         xsvd = []
@@ -62,7 +59,7 @@ class SSA:
             Ks = max([L, K])
             N = L + K - 1
             reconstruction = []
-            
+
             # This performs diagonal averaging of the trajectory matrix Y
             # leaving a reconstructed time series
             for k in range(N):
@@ -122,15 +119,14 @@ class SSA:
                         f2 += (self.N-i)*self.Ys[j, k]*self.Ys[j, k]
                 self.wcorr[i, j] = np.abs(f1f2 / (np.sqrt(f1) * np.sqrt(f2)))
                 self.wcorr[j, i] = self.wcorr[i, j]
-    
+
     def __statgroup(self):
         """
             A simple technique that uses statistics to perform eigentriple
             grouping.
         """
-        
         wcorr_group = np.matrix(np.zeros(shape=self.wcorr.shape))
-        
+
         # Due to the nature of the wcorr matrix and the nature of the the singular
         # values. A statistical approach to the eigentriple grouping problem does
         # and excellent job at identifying primative groups. These groups can be
@@ -140,17 +136,16 @@ class SSA:
         # matrix.
         for colidx in range(self.wcorr.shape[0]):
             u = np.mean(self.wcorr[:, colidx])
-            o2 = np.std(self.wcorr[:, colidx])        
+            o2 = np.std(self.wcorr[:, colidx])
             outliers = self.wcorr[:, colidx] > (u + 2*o2)
             wcorr_group[:, colidx] = outliers
-            
+
             # Only take consective outliers
             for rowidx in range(1, wcorr_group.shape[0] - 1):
                 if wcorr_group[rowidx-1,colidx] == wcorr_group[rowidx+1,colidx] == False \
                    and wcorr_group[rowidx,colidx] == True and rowidx != colidx:
                     wcorr_group[rowidx,colidx] = False
-                    
-            
+
         # Now that the connected graph is found, we expect the resulting matrix to
         # be symetric along the main diagonal. We can take the intersection of the
         # lower and upper triangular matrix which will remove outliers that have
@@ -159,7 +154,7 @@ class SSA:
         lower = np.tril(wcorr_group).T
         np.where((upper == lower), upper, 0)
         wcorr_group = np.add(upper, np.tril(upper.T, k=-1))
-        
+
         # After we construct a symmetric matrix we now can define a group as the true
         # elements in the column of a matrix. Below we construct the groups array where
         # each element contains a range described by [a, b)
@@ -173,7 +168,7 @@ class SSA:
                 rg[-1] += 1
                 groups.append(rg)
             colidx += len(rg)
-            
+
         # The final step is to take the union of groups that are next to each other.
         # If the groupings overlap because they share a _weak_ seperable component then
         # the groups can be merged together.
@@ -188,7 +183,7 @@ class SSA:
 
         self.wcorr_group = wcorr_group
         self.auto_grouping = groups_merged
-        
+
     def __computelrf(self, r, a, i):
         """
             Helper function that solves the linear recurrance formula described in
@@ -201,7 +196,7 @@ class SSA:
             for j in range(1, self.rank):
                 total += np.multiply(a[a.shape[0]-j-1,0], self.__computelrf(r, a, i-j))
             return total
-        
+
     def __init__(self, ts, window=None):
         """
             :param ts: The timeseries to perform the SSA decomposition on
@@ -242,18 +237,18 @@ class SSA:
         # Perform the reconstruction step
         # Section 1.1.2, part 1 of Analysis of Time Series Structure SSA and Related Techniques
         self.__reconstruct()
-        
+
         # Compute the w corrilation matrix
         self.__compute_w()
-        
+
         # Perform eigentriple grouping based on statistical filter, and connected graph confirmation
         self.__statgroup()
-        
+
     def forecast(self, i, j=None, forecast=None):
         """
             Given a grouping defined by [i, j), forecasts ahead 1 period, where the period
             is equal to the window length defined by the decomposition.
-            
+
             :param i: First element in reconstruction grouping
             :param j: Last element in reconstruction grouping
             :returns: An array that contains the extension of the reconstruction and True/False
@@ -273,7 +268,7 @@ class SSA:
         pi = basis.T[:, -1]
         v2 = np.sum(np.power(pi, 2.0))
         p_hat = basis[:-1, :]
-        
+
         alpha = np.matrix(np.zeros(shape=p_hat[:, 0].shape))
         for i in range(basis.shape[1]):
             alpha[:, 0] += pi[i, 0]*p_hat[:, i]
@@ -282,21 +277,21 @@ class SSA:
 
         if forecast is None:
             forecast = self.L
-        
+
         for i in range(0, forecast):
             gi = self.__computelrf(forecasted, alpha, reconstruction.shape[0]+i)
             forecasted = np.concatenate((forecasted, gi), axis=0)
         return forecasted
-        
+
     def get_reconstructed(self, i, j=None):
         """
             Gets the reconstructed timeseries. If both i and j are specified reconstructed
             will sum all the timeseries between [i, j) and return the result.
-            
+
             :param i: First reconstruction
             :param j: Ending reconstruction
         """
-        
+
         if j is not None:
             assert(i < j)
             assert(0 <= i < self.Ys.shape[0])
@@ -311,19 +306,19 @@ class SSA:
             Gets the singular values in decending order from the svd step of the decomposition
         """
         return self._svd[1]
-    
+
     def get_wcorr(self):
         """
             Gets the w-corrilation matrix of the reconstructed timeseries
         """
         return self.wcorr
-    
+
     def get_wcorr_grouping(self):
         """
             Gets the grouping matrix of the w-corrilation matrix
         """
         return self.wcorr_group
-    
+
     def get_grouping(self):
         """
             Returns a list of eigentriple groupings
