@@ -125,64 +125,67 @@ class SSA:
             A simple technique that uses statistics to perform eigentriple
             grouping.
         """
-        wcorr_group = np.matrix(np.zeros(shape=self.wcorr.shape))
+        try:
+            wcorr_group = np.matrix(np.zeros(shape=self.wcorr.shape))
 
-        # Due to the nature of the wcorr matrix and the nature of the the singular
-        # values. A statistical approach to the eigentriple grouping problem does
-        # and excellent job at identifying primative groups. These groups can be
-        # found by finding outleries in the wcorr column. The first step in the
-        # grouping process is to identy the outliers of each column. These outliers
-        # construct a directed graph which is represented in the wcorr_group
-        # matrix.
-        for colidx in range(self.wcorr.shape[0]):
-            u = np.mean(self.wcorr[:, colidx])
-            o2 = np.std(self.wcorr[:, colidx])
-            outliers = self.wcorr[:, colidx] > (u + 2*o2)
-            wcorr_group[:, colidx] = outliers
+            # Due to the nature of the wcorr matrix and the nature of the the singular
+            # values. A statistical approach to the eigentriple grouping problem does
+            # and excellent job at identifying primative groups. These groups can be
+            # found by finding outleries in the wcorr column. The first step in the
+            # grouping process is to identy the outliers of each column. These outliers
+            # construct a directed graph which is represented in the wcorr_group
+            # matrix.
+            for colidx in range(self.wcorr.shape[0]):
+                u = np.mean(self.wcorr[:, colidx])
+                o2 = np.std(self.wcorr[:, colidx])
+                outliers = self.wcorr[:, colidx] > (u + 2*o2)
+                wcorr_group[:, colidx] = outliers
 
-            # Only take consective outliers
-            for rowidx in range(1, wcorr_group.shape[0] - 1):
-                if wcorr_group[rowidx-1,colidx] == wcorr_group[rowidx+1,colidx] == False \
-                   and wcorr_group[rowidx,colidx] == True and rowidx != colidx:
-                    wcorr_group[rowidx,colidx] = False
+                # Only take consective outliers
+                for rowidx in range(1, wcorr_group.shape[0] - 1):
+                    if wcorr_group[rowidx-1,colidx] == wcorr_group[rowidx+1,colidx] == False \
+                       and wcorr_group[rowidx,colidx] == True and rowidx != colidx:
+                        wcorr_group[rowidx,colidx] = False
 
-        # Now that the connected graph is found, we expect the resulting matrix to
-        # be symetric along the main diagonal. We can take the intersection of the
-        # lower and upper triangular matrix which will remove outliers that have
-        # been included in the statistical filter.
-        upper = np.triu(wcorr_group)
-        lower = np.tril(wcorr_group).T
-        np.where((upper == lower), upper, 0)
-        wcorr_group = np.add(upper, np.tril(upper.T, k=-1))
+            # Now that the connected graph is found, we expect the resulting matrix to
+            # be symetric along the main diagonal. We can take the intersection of the
+            # lower and upper triangular matrix which will remove outliers that have
+            # been included in the statistical filter.
+            upper = np.triu(wcorr_group)
+            lower = np.tril(wcorr_group).T
+            np.where((upper == lower), upper, 0)
+            wcorr_group = np.add(upper, np.tril(upper.T, k=-1))
 
-        # After we construct a symmetric matrix we now can define a group as the true
-        # elements in the column of a matrix. Below we construct the groups array where
-        # each element contains a range described by [a, b)
-        groups = []
-        colidx = 0
-        while colidx < self.wcorr.shape[0]:
-            rg = np.where(wcorr_group[:, colidx] == True)[0]
-            if len(rg) == 1:
-                groups.append(np.array([rg[0], rg[0] + 1]))
-            else:
-                rg[-1] += 1
-                groups.append(rg)
-            colidx += len(rg)
+            # After we construct a symmetric matrix we now can define a group as the true
+            # elements in the column of a matrix. Below we construct the groups array where
+            # each element contains a range described by [a, b)
+            groups = []
+            colidx = 0
+            while colidx < self.wcorr.shape[0]:
+                rg = np.where(wcorr_group[:, colidx] == True)[0]
+                if len(rg) == 1:
+                    groups.append(np.array([rg[0], rg[0] + 1]))
+                else:
+                    rg[-1] += 1
+                    groups.append(rg)
+                colidx += len(rg)
 
-        # The final step is to take the union of groups that are next to each other.
-        # If the groupings overlap because they share a _weak_ seperable component then
-        # the groups can be merged together.
-        groups_merged = [groups[0]]
-        groupidx = 1
-        while groupidx < len(groups):
-            if groups_merged[-1][-1] > groups[groupidx][0]:
-                groups_merged[-1][-1] = groups[groupidx][-1]
-            else:
-                groups_merged.append(groups[groupidx])
-            groupidx += 1
+            # The final step is to take the union of groups that are next to each other.
+            # If the groupings overlap because they share a _weak_ seperable component then
+            # the groups can be merged together.
+            groups_merged = [groups[0]]
+            groupidx = 1
+            while groupidx < len(groups):
+                if groups_merged[-1][-1] > groups[groupidx][0]:
+                    groups_merged[-1][-1] = groups[groupidx][-1]
+                else:
+                    groups_merged.append(groups[groupidx])
+                groupidx += 1
 
-        self.wcorr_group = wcorr_group
-        self.auto_grouping = groups_merged
+            self.wcorr_group = wcorr_group
+            self.auto_grouping = groups_merged
+        except:
+            print('warn: __statgroup failed, auto grouping not working')
 
     def __computelrf(self, r, a, i):
         """
